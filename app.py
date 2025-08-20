@@ -1,42 +1,143 @@
 import streamlit as st
 import requests
+import time
+from datetime import datetime
 
 # ========================
 # CONFIG
 # ========================
 API_URL = "http://127.0.0.1:8000/predict"  # FastAPI endpoint
+HEALTH_URL = "http://127.0.0.1:8000/health"  # Health check endpoint
 
-st.set_page_config(page_title="Fraud Detection Dashboard", layout="centered")
+# Enhanced page configuration
+st.set_page_config(
+    page_title="Fraud Detection Dashboard",
+    page_icon="🔎",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.title("🔎 Fraud Detection Dashboard")
-st.markdown("Interactive fraud detection for **E-Commerce & Banking transactions**.")
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+    }
+    .fraud-alert {
+        background-color: #ffebee;
+        border-left: 4px solid #f44336;
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
+    .safe-alert {
+        background-color: #e8f5e8;
+        border-left: 4px solid #4caf50;
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+st.markdown('<h1 class="main-header">🔎 Fraud Detection Dashboard</h1>', unsafe_allow_html=True)
+st.markdown("### Interactive fraud detection for **E-Commerce & Banking transactions**")
+
+# Sidebar with API status
+with st.sidebar:
+    st.header("🔧 System Status")
+    
+    # Check API health
+    try:
+        health_response = requests.get(HEALTH_URL, timeout=5)
+        if health_response.status_code == 200:
+            health_data = health_response.json()
+            st.success("✅ API Connected")
+            st.info(f"Model: {health_data.get('model_type', 'Unknown')}")
+            st.info(f"Features: {health_data.get('features', 0)}")
+        else:
+            st.error("❌ API Error")
+    except Exception as e:
+        st.error("❌ API Unreachable")
+        st.error(f"Error: {str(e)}")
+    
+    st.divider()
+    st.markdown("### 📊 Model Performance")
+    st.info("ROC-AUC: 0.7693")
+    st.info("Accuracy: 95.67%")
+    
+    st.divider()
+    st.markdown("### 📝 Instructions")
+    st.markdown("""
+    1. Fill in transaction details
+    2. Click 'Check Fraud Risk'
+    3. Review prediction results
+    4. Banking fields are optional
+    """)
 
 # ========================
 # INPUT FORM
 # ========================
-st.subheader("Enter Transaction Details")
+st.markdown("### 📝 Enter Transaction Details")
+
+# Create tabs for better organization
+tab1, tab2 = st.tabs(["🛒 E-Commerce Data", "🏦 Banking Data (Optional)"])
 
 with st.form("fraud_form"):
-    col1, col2 = st.columns(2)
+    with tab1:
+        st.markdown("#### Required E-Commerce Information")
+        col1, col2 = st.columns(2)
 
-    with col1:
-        user_id = st.number_input("User ID", value=247547)
-        signup_time = st.text_input("Signup Time", "2015-06-28 03:00:34")
-        purchase_time = st.text_input("Purchase Time", "2015-08-09 03:57:29")
-        purchase_value = st.number_input("Purchase Value", value=47.0)
-        device_id = st.text_input("Device ID", "KIXYSVCHIPQBR")
-        source = st.selectbox("Source", ["SEO", "Ads", "Direct"])
-        browser = st.selectbox("Browser", ["Chrome", "Safari", "Firefox", "IE"])
+        with col1:
+            user_id = st.number_input("👤 User ID", value=247547, help="Unique identifier for the user")
+            signup_time = st.text_input("📅 Signup Time", "2015-06-28 03:00:34", 
+                                      help="Format: YYYY-MM-DD HH:MM:SS")
+            purchase_time = st.text_input("🛍️ Purchase Time", "2015-08-09 03:57:29", 
+                                        help="Format: YYYY-MM-DD HH:MM:SS")
+            purchase_value = st.number_input("💰 Purchase Value ($)", value=47.0, min_value=0.0, 
+                                           help="Amount of the purchase")
+            device_id = st.text_input("📱 Device ID", "KIXYSVCHIPQBR", 
+                                    help="Unique device identifier")
+        
+        with col2:
+            source = st.selectbox("🔗 Source", ["SEO", "Ads", "Direct"], 
+                                help="How the user found the site")
+            browser = st.selectbox("🌐 Browser", ["Chrome", "Safari", "Firefox", "IE"], 
+                                 help="User's web browser")
+            sex = st.selectbox("👥 Sex", ["M", "F"], help="User's gender")
+            age = st.number_input("🎂 Age", value=30, min_value=1, max_value=120, 
+                                help="User's age")
+            ip_address = st.text_input("🌍 IP Address", "43.173.1.96", 
+                                     help="User's IP address")
+            transaction_country = st.text_input("🏳️ Transaction Country", "Australia", 
+                                              help="Country where transaction occurred")
     
-    with col2:
-        sex = st.selectbox("Sex", ["M", "F"])
-        age = st.number_input("Age", value=30)
-        ip_address = st.text_input("IP Address", "43.173.1.96")
-        transaction_country = st.text_input("Transaction Country", "Australia")
-        amount = st.number_input("Banking Amount (optional)", value=149.62)
-        time_val = st.number_input("Banking Time (optional)", value=25432)
+    with tab2:
+        st.markdown("#### Optional Banking Information")
+        st.info("💡 These fields are optional and can be left at default values if not available.")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            amount = st.number_input("🏦 Banking Amount", value=149.62, min_value=0.0, 
+                                   help="Banking transaction amount (optional)")
+        with col4:
+            time_val = st.number_input("⏰ Banking Time", value=25432, min_value=0, 
+                                     help="Banking transaction time (optional)")
     
-    submitted = st.form_submit_button("🔍 Check Fraud Risk")
+    # Submit button with better styling
+    col_submit1, col_submit2, col_submit3 = st.columns([1, 2, 1])
+    with col_submit2:
+        submitted = st.form_submit_button("🔍 Check Fraud Risk", 
+                                        use_container_width=True, 
+                                        type="primary")
 
 # ========================
 # CALL FASTAPI
