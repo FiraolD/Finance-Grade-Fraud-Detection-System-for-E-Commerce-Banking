@@ -1,81 +1,79 @@
-# app.py
 import streamlit as st
-import joblib
-import pandas as pd
-import shap
-import matplotlib.pyplot as plt
-import numpy as np
+import requests
 
-st.title("🛡️ AdeyGuard Fraud Detection Dashboard")
-st.write("Upload a transaction to predict fraud risk.")
+# ========================
+# CONFIG
+# ========================
+API_URL = "http://127.0.0.1:8000/predict"  # FastAPI endpoint
 
-# Load the full pipeline
-try:
-    pipeline = joblib.load("models/XGBoost_pipeline.pkl")
-    st.success("✅ Model pipeline loaded successfully!")
-except Exception as e:
-    st.error(f"❌ Failed to load model: {e}")
-    st.stop()
+st.set_page_config(page_title="Fraud Detection Dashboard", layout="centered")
 
-# Access the model using correct name
-try:
-    model = pipeline.named_steps['model']
-    preprocessor = pipeline.named_steps['scaler']
-except KeyError as e:
-    st.error(f"❌ Pipeline missing expected step: {e}")
-    st.write("Available steps:", list(pipeline.named_steps.keys()))
-    st.stop()
+st.title("🔎 Fraud Detection Dashboard")
+st.markdown("Interactive fraud detection for **E-Commerce & Banking transactions**.")
 
-# Show pipeline steps in sidebar for debugging
-st.sidebar.header("🔧 Pipeline Info")
-for name in pipeline.named_steps:
-    st.sidebar.write(f"- `{name}`")
+# ========================
+# INPUT FORM
+# ========================
+st.subheader("Enter Transaction Details")
 
-# Upload data
-uploaded = st.file_uploader("Upload transaction CSV", type="csv")
-if uploaded:
+with st.form("fraud_form"):
+    col1, col2 = st.columns(2)
+
+    with col1:
+        user_id = st.number_input("User ID", value=247547)
+        signup_time = st.text_input("Signup Time", "2015-06-28 03:00:34")
+        purchase_time = st.text_input("Purchase Time", "2015-08-09 03:57:29")
+        purchase_value = st.number_input("Purchase Value", value=47.0)
+        device_id = st.text_input("Device ID", "KIXYSVCHIPQBR")
+        source = st.selectbox("Source", ["SEO", "Ads", "Direct"])
+        browser = st.selectbox("Browser", ["Chrome", "Safari", "Firefox", "IE"])
+    
+    with col2:
+        sex = st.selectbox("Sex", ["M", "F"])
+        age = st.number_input("Age", value=30)
+        ip_address = st.text_input("IP Address", "43.173.1.96")
+        transaction_country = st.text_input("Transaction Country", "Australia")
+        amount = st.number_input("Banking Amount (optional)", value=149.62)
+        time_val = st.number_input("Banking Time (optional)", value=25432)
+    
+    submitted = st.form_submit_button("🔍 Check Fraud Risk")
+
+# ========================
+# CALL FASTAPI
+# ========================
+if submitted:
+    payload = {
+        "user_id": user_id,
+        "signup_time": signup_time,
+        "purchase_time": purchase_time,
+        "purchase_value": purchase_value,
+        "device_id": device_id,
+        "source": source,
+        "browser": browser,
+        "sex": sex,
+        "age": age,
+        "ip_address": ip_address,
+        "transaction_country": transaction_country,
+        "Amount": amount,
+        "Time": time_val
+    }
+
     try:
-        df = pd.read_csv(uploaded)
-        st.write("📄 Uploaded Data Sample:")
-        st.dataframe(df.head())
+        response = requests.post(API_URL, json=payload)
+        if response.status_code == 200:
+            result = response.json()
+            fraud_prob = result["fraud_probability"]
+            fraud_label = result["fraud_label"]
 
-        # Ensure correct columns are present
-        expected_features = preprocessor.feature_names_in_
-        missing_cols = [col for col in expected_features if col not in df.columns]
-        if missing_cols:
-            st.error(f"❌ Missing required columns: {missing_cols}")
-            st.stop()
+            st.subheader("📊 Prediction Results")
+            st.metric("Fraud Probability", f"{fraud_prob * 100:.2f}%")
+            st.metric("Fraud Label", "🚨 Fraud" if fraud_label == 1 else "✅ Genuine")
 
-        # Reorder columns to match training
-        X = df[expected_features]
-
-        # Predict probabilities
-        proba = pipeline.predict_proba(X)[0, 1]
-        pred = "🚨 Fraud" if proba > 0.5 else "✅ Legitimate"
-
-        st.write(f"### Prediction: {pred}")
-        st.write(f"**Fraud Probability:** {proba:.2%}")
-
-        # SHAP Explanation
-        st.subheader("🔍 Why This Was Flagged")
-
-        # Use the trained XGBoost model directly with SHAP
-        explainer = shap.TreeExplainer(model)
-        X_processed = preprocessor.transform(X)
-        shap_values = explainer.shap_values(X_processed)
-
-        # Waterfall plot for first row
-        fig, ax = plt.subplots(figsize=(8, 6))
-        shap.waterfall_plot(
-            shap.Explanation(
-                values=shap_values[0],
-                base_values=explainer.expected_value,
-                data=X.iloc[0]
-            ),
-            max_display=8
-        )
-        st.pyplot(fig)
-        plt.close()
-
+            if fraud_label == 1:
+                st.error("⚠️ High risk: This transaction is likely FRAUDULENT.")
+            else:
+                st.success("✅ Safe: This transaction is likely genuine.")
+        else:
+            st.error(f"API Error: {response.status_code} - {response.text}")
     except Exception as e:
-        st.error(f"❌ Error during prediction: {e}")
+        st.error(f"Could not connect to API. Error: {str(e)}")
