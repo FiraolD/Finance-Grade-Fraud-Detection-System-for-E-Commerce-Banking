@@ -151,8 +151,15 @@ async def predict_fraud(transaction: TransactionData):
         X = preprocess_transaction(transaction, model_info['encoders'], model_info['feature_columns'])
         
         # Make prediction
-        fraud_prob = pipeline.predict_proba(X)[0, 1]
-        fraud_label = 1 if fraud_prob > 0.5 else 0
+        #fraud_prob = pipeline.predict_proba(X)[0, 1]
+        #fraud_label = 1 if fraud_prob > 0.5 else 0
+
+        # Define a custom threshold
+        FRAUD_THRESHOLD = 0.2  
+
+        fraud_prob = pipeline.predict_proba(X)[:, 1][0]
+        fraud_label = 1 if fraud_prob >= FRAUD_THRESHOLD else 0
+
         
         # Calculate confidence (distance from decision boundary)
         confidence = abs(fraud_prob - 0.5) * 2

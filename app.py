@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import time
 from datetime import datetime
+import json
 
 # ========================
 # CONFIG
@@ -77,11 +78,11 @@ with st.sidebar:
     st.divider()
     st.markdown("### 📝 Instructions")
     st.markdown("""
-    1. Fill in transaction details
+    1. Fill in transaction details OR upload JSON
     2. Click 'Check Fraud Risk'
     3. Review prediction results
-    4. Banking fields are optional
     """)
+
 
 # ========================
 # INPUT FORM
@@ -98,49 +99,34 @@ with st.form("fraud_form"):
 
         with col1:
             user_id = st.number_input("👤 User ID", value=247547, help="Unique identifier for the user")
-            signup_time = st.text_input("📅 Signup Time", "2015-06-28 03:00:34", 
-                                      help="Format: YYYY-MM-DD HH:MM:SS")
-            purchase_time = st.text_input("🛍️ Purchase Time", "2015-08-09 03:57:29", 
-                                        help="Format: YYYY-MM-DD HH:MM:SS")
-            purchase_value = st.number_input("💰 Purchase Value ($)", value=47.0, min_value=0.0, 
-                                           help="Amount of the purchase")
-            device_id = st.text_input("📱 Device ID", "KIXYSVCHIPQBR", 
-                                    help="Unique device identifier")
+            signup_time = st.text_input("📅 Signup Time", "2015-06-28 03:00:34", help="Format: YYYY-MM-DD HH:MM:SS")
+            purchase_time = st.text_input("🛍️ Purchase Time", "2015-08-09 03:57:29", help="Format: YYYY-MM-DD HH:MM:SS")
+            purchase_value = st.number_input("💰 Purchase Value ($)", value=47.0, min_value=0.0)
+            device_id = st.text_input("📱 Device ID", "KIXYSVCHIPQBR")
         
         with col2:
-            source = st.selectbox("🔗 Source", ["SEO", "Ads", "Direct"], 
-                                help="How the user found the site")
-            browser = st.selectbox("🌐 Browser", ["Chrome", "Safari", "Firefox", "IE"], 
-                                 help="User's web browser")
-            sex = st.selectbox("👥 Sex", ["M", "F"], help="User's gender")
-            age = st.number_input("🎂 Age", value=30, min_value=1, max_value=120, 
-                                help="User's age")
-            ip_address = st.text_input("🌍 IP Address", "43.173.1.96", 
-                                     help="User's IP address")
-            transaction_country = st.text_input("🏳️ Transaction Country", "Australia", 
-                                              help="Country where transaction occurred")
+            source = st.selectbox("🔗 Source", ["SEO", "Ads", "Direct"])
+            browser = st.selectbox("🌐 Browser", ["Chrome", "Safari", "Firefox", "IE"])
+            sex = st.selectbox("👥 Sex", ["M", "F"])
+            age = st.number_input("🎂 Age", value=30, min_value=1, max_value=120)
+            ip_address = st.text_input("🌍 IP Address", "43.173.1.96")
+            transaction_country = st.text_input("🏳️ Transaction Country", "Australia")
     
     with tab2:
         st.markdown("#### Optional Banking Information")
-        st.info("💡 These fields are optional and can be left at default values if not available.")
-        
+        st.info("💡 These fields are optional and can be left default.")
+
         col3, col4 = st.columns(2)
         with col3:
-            amount = st.number_input("🏦 Banking Amount", value=149.62, min_value=0.0, 
-                                   help="Banking transaction amount (optional)")
+            amount = st.number_input("🏦 Banking Amount", value=149.62, min_value=0.0)
         with col4:
-            time_val = st.number_input("⏰ Banking Time", value=25432, min_value=0, 
-                                     help="Banking transaction time (optional)")
-    
-    # Submit button with better styling
-    col_submit1, col_submit2, col_submit3 = st.columns([1, 2, 1])
-    with col_submit2:
-        submitted = st.form_submit_button("🔍 Check Fraud Risk", 
-                                        use_container_width=True, 
-                                        type="primary")
+            time_val = st.number_input("⏰ Banking Time", value=25432, min_value=0)
+
+    # Submit button inside the form
+    submitted = st.form_submit_button("🔍 Check Fraud Risk", use_container_width=True, type="primary")
 
 # ========================
-# CALL FASTAPI
+# CALL FASTAPI (Form Data)
 # ========================
 if submitted:
     payload = {
@@ -178,3 +164,36 @@ if submitted:
             st.error(f"API Error: {response.status_code} - {response.text}")
     except Exception as e:
         st.error(f"Could not connect to API. Error: {str(e)}")
+
+
+# ========================
+# JSON Upload Option
+# ========================
+st.markdown("---")
+st.markdown("### 📂 Or Upload a JSON File")
+
+uploaded_file = st.file_uploader("Upload JSON transaction file", type=["json"])
+
+if uploaded_file is not None:
+    try:
+        transaction_data = json.load(uploaded_file)
+        st.json(transaction_data)
+
+        response = requests.post(API_URL, json=transaction_data)
+        if response.status_code == 200:
+            result = response.json()
+            fraud_prob = result["fraud_probability"]
+            fraud_label = result["fraud_label"]
+
+            st.subheader("📊 Prediction Results (from JSON)")
+            st.metric("Fraud Probability", f"{fraud_prob * 100:.2f}%")
+            st.metric("Fraud Label", "🚨 Fraud" if fraud_label == 1 else "✅ Genuine")
+
+            if fraud_label == 1:
+                st.error("⚠️ High risk: This transaction is likely FRAUDULENT.")
+            else:
+                st.success("✅ Safe: This transaction is likely genuine.")
+        else:
+            st.error(f"API Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        st.error(f"Invalid JSON file. Error: {str(e)}")
